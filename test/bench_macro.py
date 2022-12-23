@@ -7,7 +7,7 @@ from hgl import mp, utils
 from dgl.data import rdf, reddit
 from dgl.data import citation_graph as cit
 from dgl.data import gnn_benchmark as bench
-from common.model import GCNModel, GATModel, RGCNModel, RGATModel
+from common.model import GCNModel, GATModel, RGCNModel, RGATModel, REmbedding
 from common.dglmodel import DGLGCNModel, DGLGATModel, DGLRGCNModel, DGLRGATModel
 try:
     import torch_geometric as pyg
@@ -417,6 +417,7 @@ class BenchMethods:
         n_edges = dglgraph.num_edges()
         print('n_edges:', n_edges)
         n_labels = dataset.num_classes
+        n_labels = d_hidden
         print('n_labels:', n_labels)
         category = dataset.predict_category
         print('predict_category:', category)
@@ -426,10 +427,16 @@ class BenchMethods:
             dglgraph.num_nodes(category),
             n_labels
         ]).to('cuda')
+        embedding = REmbedding(
+            hgraph=graph,
+            embedding_dim=d_hidden
+        ).to('cuda')
+        
+
         model = model(
             hgraph=graph,
             in_features=d_hidden,
-            gnn_features=d_hidden,
+            # gnn_features=d_hidden,
             out_features=n_labels
         ).to('cuda')
         node_indices = {
@@ -439,9 +446,10 @@ class BenchMethods:
             ).to('cuda')
             for nty, num in graph.nty2num.items()
         }
+        node_features = embedding(graph, node_indices)
         kwargs = dict({
             'hgraph': graph,
-            'xs': node_indices
+            'xs': node_features
         })
         if isinstance(model, RGCNModel):
             kwargs['norms'] = {
