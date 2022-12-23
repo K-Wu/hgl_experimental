@@ -20,6 +20,7 @@ except ImportError as e:
 
 torch.backends.cudnn.allow_tf32 = False
 torch.backends.cuda.matmul.allow_tf32 = False
+from setup_lite import load_data_as_dgl_graph
 
 
 class BenchMethods:
@@ -400,7 +401,8 @@ class BenchMethods:
 
         # dataset
         n_epochs = 20
-        dglgraph = dataset[0]
+        #dglgraph = dataset[0]
+        dglgraph = dataset
         if False and dglgraph.num_edges() > 128 * 1024:
             nids = {
                 nty: torch.randperm(
@@ -416,11 +418,11 @@ class BenchMethods:
         graph = mp.from_dglgraph(dglgraph)
         n_edges = dglgraph.num_edges()
         print('n_edges:', n_edges)
-        n_labels = dataset.num_classes
+        #n_labels = dataset.num_classes
         n_labels = d_hidden
         print('n_labels:', n_labels)
-        category = dataset.predict_category
-        print('predict_category:', category)
+        #category = dataset.predict_category
+        #print('predict_category:', category)
 
         # inputs
         #gradient = torch.ones([
@@ -639,9 +641,10 @@ class Benchmark(BenchMethods):
                 d_hidden=d_hidden
             )
         elif lib == 'hgl':
-            dataset = self.DGL_DATASETS[
-                dataset
-            ]()
+            # dataset = self.DGL_DATASETS[
+            #     dataset
+            # ]()
+            dataset = load_data_as_dgl_graph(dataset)
             if model == 'rgcn':
                 model = RGCNModel
             elif model == 'rgat':
