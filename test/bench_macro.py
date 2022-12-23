@@ -81,7 +81,7 @@ class BenchMethods:
         # dataset
         n_epochs = 20
         graph = dataset[0]
-        if graph.num_edges > 128 * 1024:
+        if False and  graph.num_edges > 128 * 1024:
             n_nodes = graph.num_nodes
             nids = torch.randperm(n_nodes // 16)
             sampler = pygld.NeighborLoader(
@@ -143,7 +143,7 @@ class BenchMethods:
         graph = dataset[0]
         assert len(graph.node_types) == 1
         nty = graph.node_types[0]
-        if graph.num_edges > 128 * 1024:
+        if False and graph.num_edges > 128 * 1024:
             sampler = pygld.NeighborLoader(
                 graph,
                 num_neighbors={
@@ -204,7 +204,7 @@ class BenchMethods:
         # dataset
         n_epochs = 20
         graph = dataset[0]
-        if graph.num_edges() > 128 * 1024:
+        if False and graph.num_edges() > 128 * 1024:
             n_nodes = graph.num_nodes()
             nids = torch.randperm(n_nodes // 16)
             graph = dgl.sampling.sample_neighbors(
@@ -261,7 +261,7 @@ class BenchMethods:
         # dataset
         n_epochs = 20
         graph = dataset[0]
-        if graph.num_edges() > 128 * 1024:
+        if False and graph.num_edges() > 128 * 1024:
             nids = {
                 nty: torch.randperm(
                     graph.num_nodes(nty) // 16
@@ -320,7 +320,7 @@ class BenchMethods:
         # dataset
         n_epochs = 20
         dglgraph = dataset[0]
-        if dglgraph.num_edges() > 128 * 1024:
+        if False and dglgraph.num_edges() > 128 * 1024:
             n_nodes = dglgraph.num_nodes()
             nids = torch.randperm(n_nodes // 16)
             dglgraph = dgl.sampling.sample_neighbors(
@@ -401,7 +401,7 @@ class BenchMethods:
         # dataset
         n_epochs = 20
         dglgraph = dataset[0]
-        if dglgraph.num_edges() > 128 * 1024:
+        if False and dglgraph.num_edges() > 128 * 1024:
             nids = {
                 nty: torch.randperm(
                     dglgraph.num_nodes(nty) // 16
@@ -423,10 +423,14 @@ class BenchMethods:
         print('predict_category:', category)
 
         # inputs
-        gradient = torch.ones([
-            dglgraph.num_nodes(category),
-            n_labels
-        ]).to('cuda')
+        #gradient = torch.ones([
+        #    dglgraph.num_nodes(category),
+        #    n_labels
+        #]).to('cuda')
+        gradient = {
+            nty: torch.ones([num, n_labels]).to('cuda')
+            for nty, num in graph.nty2num.items()
+        }
         embedding = REmbedding(
             hgraph=graph,
             embedding_dim=d_hidden
@@ -463,21 +467,28 @@ class BenchMethods:
         stitcher = hgl.Stitcher()
         dataflow = mod2ir.transform(
             model, kwargs=kwargs
-        )[category]
+        )#[category]
         dataflow = optimizer.lower(
             dataflow, kwargs=kwargs
         )
-        dataflow = stitcher.transform(
-            dataflow, kwargs=kwargs
-        )
+        if isinstance(dataflow, dict):
+            for key in dataflow:
+                dataflow[key] = stitcher.transform(
+                    dataflow[key], kwargs=kwargs
+                )
+        else:
+            dataflow = stitcher.transform(
+                dataflow, kwargs=kwargs
+            )
         executor = hgl.Executor()
 
         # prewarm
         executor.train()
-        y = executor.run(
-            dataflow, kwargs=kwargs
-        )
-        y.backward(gradient=gradient)
+        for key in dataflow:
+            y = executor.run(
+                dataflow[key], kwargs=kwargs
+            )
+            y.backward(gradient=gradient[key],retain_graph=True)
         torch.cuda.synchronize()
 
         # training
@@ -486,12 +497,14 @@ class BenchMethods:
         print('[TRAINING]')
         with utils.Profiler(n_epochs) as prof:
             for _ in range(n_epochs):
-                y = executor.run(
-                    dataflow, kwargs=kwargs
-                )
-                y.backward(gradient=gradient)
+                for key in dataflow:
+                    y = executor.run(
+                        dataflow[key], kwargs=kwargs
+                    )
+                    y.backward(gradient=gradient[key],retain_graph=True)
             torch.cuda.synchronize()
             timing = prof.timing() / n_epochs
+        print("avg time", timing)
         print('throughput: {:.1f}'.format(n_edges / timing))
 
 

@@ -18,29 +18,30 @@ class Benchmark:
         # dataset
         graph = dataset[0]
         # print(graph.num_nodes(), graph.num_edges())
-        loader = dgl.dataloading.NodeDataLoader(
-            graph=graph,
-            indices={
-                nty: torch.randperm(
-                    graph.num_nodes(nty)
-                )
-                for nty in graph.ntypes
-            },
-            graph_sampler=dgl.dataloading.MultiLayerNeighborSampler(
-                [16] * n_layers
-            ),
-            batch_size=batch_size
-        )
-        batch = next(iter(loader))
-        src, dst, blk = batch
+        # loader = dgl.dataloading.NodeDataLoader(
+        #     graph=graph,
+        #     indices={
+        #         nty: torch.randperm(
+        #             graph.num_nodes(nty)
+        #         )
+        #         for nty in graph.ntypes
+        #     },
+        #     graph_sampler=dgl.dataloading.MultiLayerNeighborSampler(
+        #         [16] * n_layers
+        #     ),
+        #     batch_size=batch_size
+        # )
+        #batch = next(iter(loader))
+        #src, dst, blk = batch
         #
-        subgraph = blk[0].to('cuda')
+        graph = graph.to('cuda')
+        #subgraph = blk[0].to('cuda')
         num_nodes = sum([
-            subgraph.num_nodes(nty)
-            for nty in subgraph.ntypes
+            graph.num_nodes(nty)
+            for nty in graph.ntypes
         ])
         num_edges = sum([
-            subgraph.num_edges(rel)
+            graph.num_edges(rel)
             for rel in graph.canonical_etypes
         ])
         print('num_nodes: {}, num_edges: {}'
@@ -57,9 +58,9 @@ class Benchmark:
         d_hidden = 32
         features = {
             nty: torch.zeros(
-                [subgraph.num_nodes(nty), d_hidden]
+                [graph.num_nodes(nty), d_hidden]
             ).to('cuda')
-            for nty in subgraph.ntypes
+            for nty in graph.ntypes
         }
         model = dglnn.HeteroGraphConv(
             {
@@ -68,12 +69,12 @@ class Benchmark:
                     n_heads, activation=None, bias=True,
                     allow_zero_in_degree=True
                 )
-                for ety in sorted(list(subgraph.etypes))
+                for ety in sorted(list(graph.etypes))
             }, aggregate='mean'
         ).to('cuda')
 
         # prewarm
-        y = model(subgraph, features)[category]
+        #y = model(subgraph, features)[category]
         torch.sum(y).backward()
         torch.cuda.synchronize()
 
@@ -84,7 +85,8 @@ class Benchmark:
         print('[TRAINING]')
         with utils.Profiler(n_epochs) as prof:
             for _ in range(n_epochs):
-                y = model(subgraph, features)[category]
+                #y = model(subgraph, features)[category]
+                y = model(graph, features)[category]
                 torch.sum(y).backward()
             torch.cuda.synchronize()
             timing = prof.timing() / n_epochs
